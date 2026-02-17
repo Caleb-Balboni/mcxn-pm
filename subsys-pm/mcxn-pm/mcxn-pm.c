@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <zephyr/irq.h>
+#include <zephyr/device.h>
 #include <cmsis_core.h>
 #include "mcxn-pm.h"
 
@@ -35,12 +36,12 @@ static struct pin_interrupt pin_interrupt_table[WUU_EXTERNAL_PIN_AMT];
 static void wuu_external_pin_cb_handler(const void* arg) {
   (void)arg;
   volatile uint32_t* pf = (volatile uint32_t*)(WUU_PIN_FLAG);
-  uint8_t pin = -1;
+  int pin = -1;
   // loop through all pin flags, find the one that triggered irq
   for (uint8_t i = 0; i < WUU_EXTERNAL_PIN_AMT; i++) {
     uint8_t pf_i = (*pf >> i) & 1;
     if (pf_i) {
-      pin = i;
+      pin = (int)i;
       *pf = (1u << i); // reset pin flag
       break;
     }
@@ -55,7 +56,8 @@ static void wuu_external_pin_cb_handler(const void* arg) {
   }
 }
 
-static void init_mcxn_pm(void) {
+static void init_mcxn_pm(const struct device* dev) {
+  (void)dev;
   for (uint8_t i = 0; i < WUU_EXTERNAL_PIN_AMT; i++) {
     mk_pin_interrupt(&pin_interrupt_table[i], 0, NULL, NULL);
   }
@@ -76,6 +78,7 @@ void wuu_external_pin_enable_interrupt(uint8_t enable) {
     return;
   }
   irq_enable(WUU_INTERRUPT_IRQ);
+  NVIC_ClearPendingIRQ(WUU_INTERRUPT_IRQ);
 }
 
 void wuu_module_enable_interrupt(wuu_interrupt_irq interrupt, uint8_t enable) {
@@ -83,10 +86,11 @@ void wuu_module_enable_interrupt(wuu_interrupt_irq interrupt, uint8_t enable) {
     irq_disable(interrupt);
   }
   irq_enable(interrupt);
+  NVIC_ClearPendingIRQ(interrupt);
 }
 
 int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
-  if (pin < 0 || pin > WUU_EXTERNAL_PIN_AMT) {
+  if (pin > WUU_EXTERNAL_PIN_AMT) {
     return -1;
   }
   volatile uint32_t* pmc = (volatile uint32_t*)(WUU_PIN_PM);
@@ -94,13 +98,11 @@ int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
   volatile uint32_t* pe1 = (volatile uint32_t*)(WUU_PIN_ENABLE1);
   volatile uint32_t* pe2 = (volatile uint32_t*)(WUU_PIN_ENABLE2);
   volatile uint32_t* pdc1 = (volatile uint32_t*)(WUU_PIN_DMATRIG1);
-  volatile uint32_t* pdc2 = (volatile uint32_t*)(WUU_PINDMATRIG2);
+  volatile uint32_t* pdc2 = (volatile uint32_t*)(WUU_PIN_DMATRIG2);
 
   // if setting to all power modes, bit must first be set to zero before other fields
-  if (cfg->pm == EXTERNAL_ALL_POWER_MODES) {
-    REG_CLR_BIT(*pmc, pin);
-  }
-  *pf = BIN(pin);
+  REG_CLR_BIT(*pmc, pin);
+  *pf = BIT(pin);
   if (pin > 15) {
     REG_SET_2BIT(pdc2, pin - 16, cfg->event);
     REG_SET_2BIT(pe2, pin - 16, cfg->edge);
@@ -108,7 +110,11 @@ int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
     REG_SET_2BIT(pdc1, pin, cfg->event);
     REG_SET_2BIT(pe1, pin, cfg->edge);
   }
-  REG_SET_BIT(*pmc, pin);
+  if (cfg->pm == EXTERNAL_PIN_ALL_POWER_MODES) {
+    REG_SET_BIT(*pmc, pin);
+  } else {
+    REG_CLR_BIT(*pmc, pin);
+  }
   return 0;
 }
 
@@ -166,9 +172,10 @@ int cmc_power_down(void) {
   REG_SET_4BIT(ckctrl, 0, CMC_CLK_DEEP); 
   REG_SET_4BIT(pmprot, 0, CMC_PMP_POWER_DOWN);
   REG_SET_4BIT(gpmctrl, 0, CMC_GPM_POWER_DOWN);
+  printk("CKCTRL=0x%08x PMPROT=0x%08x GPMCTRL=0x%08x\n", *ckctrl, *pmprot, *gpmctrl);
 
   // docs say last use register must be read back before WFI
-  (void*)gpmctrl;
+  (void)*gpmctrl;
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
   __DSB();
   __WFI();
@@ -181,7 +188,7 @@ int cmc_sleep(void) {
   volatile uint32_t* ckctrl = (volatile uint32_t*)(CMC_CKCTRL); 
   REG_SET_4BIT(ckctrl, 0, CMC_CLK_SLEEP); 
 
-  (void*)ckctrl;
+  (void)*ckctrl;
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
   __DSB();
   __WFI();
@@ -196,10 +203,10 @@ int cmc_deep_sleep(void) {
   volatile uint32_t* gpmctrl = (volatile uint32_t*)(CMC_GPMCTRL);
   REG_SET_4BIT(ckctrl, 0, CMC_CLK_DEEP); 
   REG_SET_4BIT(pmprot, 0, CMC_PMP_DEEP_SLEEP);
-  REG_SET_4BIT(gpmctrl, 0, CMC_GPM_DEPP_SLEEP);
-
+  REG_SET_4BIT(gpmctrl, 0, CMC_GPM_DEEP_SLEEP);
+  
   // docs say last use register must be read back before WFI
-  (void*)gpmctrl;
+  (void)*gpmctrl;
 	SCB->SCR |= SCB_SCR_SLEEPDEEP_Msk;
   __DSB();
   __WFI();

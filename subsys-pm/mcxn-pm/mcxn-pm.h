@@ -43,7 +43,7 @@ typedef enum external_pin_wakeup_event_t {
 
 // PE
 typedef enum external_pin_edge_detection_t {
-  EXTERNAL_PIN_DISABLED             = 0x0U    // External pin is disabled
+  EXTERNAL_PIN_DISABLED             = 0x0U,   // External pin is disabled
 	EXTERNAL_PIN_EDGE_RISING          = 0x1U,   // External pin triggers event on rising level
 	EXTERNAL_PIN_EDGE_FALLING         = 0x2U,   // External pin triggers event on falling level
 	EXTERNAL_PIN_EDGE_ANY             = 0x3U,   // External pin triggers event on any level change
@@ -52,7 +52,7 @@ typedef enum external_pin_edge_detection_t {
 // PMC
 typedef enum external_pin_pm_t {
   EXTERNAL_PIN_LOW_LEAKAGE_MODE     = 0x00U,  // External pin can only fire when in a deep sleep power down, or deep power down 
-  EXTERNAL_ALL_POWER_MODES          = 0x01U,  // External pin can fire at any time (any sleep state)
+  EXTERNAL_PIN_ALL_POWER_MODES      = 0x01U,  // External pin can fire at any time (any sleep state)
 } external_pin_pm;
 
 // user set callback function - WUU interrupt handler
@@ -66,9 +66,9 @@ struct pin_interrupt {
 
 // Configuration for WUU external pin
 struct external_pin_cfg {
-  external_pin_wakeup_event_t event;
-  external_pin_edge_detection_t edge;
-  external_pin_pm_t pm;
+  enum external_pin_wakeup_event_t event;
+  enum external_pin_edge_detection_t edge;
+  enum external_pin_pm_t pm;
 };
 
 // TODO --> add configurations for modules in the WUU
@@ -91,7 +91,7 @@ typedef enum cmc_clock_control_t {
 typedef enum cmc_power_mode_protect_t {
   CMC_PMP_DEEP_POWER_DOWN         = 0x08U,
   CMC_PMP_POWER_DOWN              = 0x02U,
-  CMC_PMP_DEEP_SLEEP              = 0x1U,
+  CMC_PMP_DEEP_SLEEP              = 0x01U,
 } cmc_power_mode_protect;
 
 // GPMCTRL
@@ -146,7 +146,7 @@ int cmc_sram_retain(uint32_t mask);
 // effect the sleeping state by keeping the core clock running.
 // @param enable - 0 if dbg should be not be enabled, any other value otherwise
 // @return - 0 if the operation was a success, -1 otherwise
-int cmc_allow_dbg(uint32_t enable);
+int cmc_allow_dbg(uint8_t enable);
 
 // puts the MCU into a deep power down state. All core, peripherals and SRAM will no be retained upon wake.
 // In deep power down mode wake will cause the entire system to reset, only the WUU can wake the MCU.
