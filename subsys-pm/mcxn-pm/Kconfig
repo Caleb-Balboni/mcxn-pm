@@ -1,0 +1,5 @@
+config HN_MCXN_PM
+  bool "power managment subsystem for mcxn"
+  default n
+  help 
+    enables the mcxn power managment subsystem allowing for control over the CMC and WUU

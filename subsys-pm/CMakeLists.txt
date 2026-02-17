@@ -1,0 +1,1 @@
+add_subdirectory_ifdef(CONFIG_HN_MCXN_PM mcxn-pm)

@@ -1,10 +1,10 @@
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
+#include <zephyr/irq.h>
 #include <cmsis_core.h>
 #include "mcxn-pm.h"
 
 // BIT MASK MACROS + HELPERS
-
 #define BIT(n) (1U << (n))
 #define REG_SET_BIT(reg, n) ((reg) |= BIT(n))
 #define REG_CLR_BIT(reg, n) ((reg) &= ~ BIT(n))
@@ -23,24 +23,72 @@ void set_bits(volatile uint32_t* val, uint8_t start_bit, uint8_t bit_num, uint32
 #define REG_SET_2BIT(regptr, idx, v) set_bits(regptr, REG_2BIT_SHIFT(idx), 2U, (uint32_t)(v))
 #define REG_SET_4BIT(regptr, idx, v) set_bits(regptr, REG_4BIT_SHIFT(idx), 4u, (uint32_t)(v))
 
-// Interrupt table contains info about currently enabled external interrupt pins
-static struct pin_interrupt pin_interrupt_table[32];
-static uint8_t pin_reg_amt = 0;
+static void mk_pin_interrupt(struct pin_interrupt* interrupt, uint8_t enabled, void* user_data, wuu_cb_t cb) {
+  interrupt->enabled = enabled;
+  interrupt->user_data = user_data;
+  interrupt->cb = cb;
+}
 
-// FUNCTION IMPL
+// Interrupt table contains info about currently enabled external interrupt pins
+static struct pin_interrupt pin_interrupt_table[WUU_EXTERNAL_PIN_AMT];
+
+static void wuu_external_pin_cb_handler(const void* arg) {
+  (void)arg;
+  volatile uint32_t* pf = (volatile uint32_t*)(WUU_PIN_FLAG);
+  uint8_t pin = -1;
+  // loop through all pin flags, find the one that triggered irq
+  for (uint8_t i = 0; i < WUU_EXTERNAL_PIN_AMT; i++) {
+    uint8_t pf_i = (*pf >> i) & 1;
+    if (pf_i) {
+      pin = i;
+      *pf = (1u << i); // reset pin flag
+      break;
+    }
+  } 
+  // if this happened something went very wrong
+  if (pin == -1) {
+    return;
+  }
+  struct pin_interrupt last_interrupt = pin_interrupt_table[pin];
+  if (last_interrupt.cb != NULL) {
+    last_interrupt.cb(last_interrupt.user_data);
+  }
+}
 
 static void init_mcxn_pm(void) {
-  // TODO
+  for (uint8_t i = 0; i < WUU_EXTERNAL_PIN_AMT; i++) {
+    mk_pin_interrupt(&pin_interrupt_table[i], 0, NULL, NULL);
+  }
+  IRQ_CONNECT(WUU_INTERRUPT_IRQ, 0, wuu_external_pin_cb_handler, NULL, 0);
+}
+
+void wuu_external_pin_attach_cb(uint8_t pin, wuu_cb_t cb, void* user_data) {
+  mk_pin_interrupt(&pin_interrupt_table[pin], 1, user_data, cb);
+}
+
+void wuu_module_attach_cb(wuu_interrupt_irq interrupt, wuu_cb_t cb, void* user_data) {
+  irq_connect_dynamic(interrupt, 0, cb, user_data, 0);
+}
+
+void wuu_external_pin_enable_interrupt(uint8_t enable) {
+  if (!enable) {
+    irq_disable(WUU_INTERRUPT_IRQ);
+    return;
+  }
+  irq_enable(WUU_INTERRUPT_IRQ);
+}
+
+void wuu_module_enable_interrupt(wuu_interrupt_irq interrupt, uint8_t enable) {
+  if (!enable) {
+    irq_disable(interrupt);
+  }
+  irq_enable(interrupt);
 }
 
 int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
-  if (pin_interrupt_table[pin].enabled) {
+  if (pin < 0 || pin > WUU_EXTERNAL_PIN_AMT) {
     return -1;
   }
-  pin_interrupt_table[pin].enabled = 1;
-  pin_interrupt_table[pin].cb = cfg->cb;
-  pin_interrupt_table[pin].user_data = cfg->user_data;
-  pin_reg_amt++;
   volatile uint32_t* pmc = (volatile uint32_t*)(WUU_PIN_PM);
   volatile uint32_t* pf = (volatile uint32_t*)(WUU_PIN_FLAG);
   volatile uint32_t* pe1 = (volatile uint32_t*)(WUU_PIN_ENABLE1);
@@ -64,6 +112,17 @@ int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
   return 0;
 }
 
+int wuu_disable_external_pin(uint8_t pin) {
+  volatile uint32_t* pe1 = (volatile uint32_t*)(WUU_PIN_ENABLE1);
+  volatile uint32_t* pe2 = (volatile uint32_t*)(WUU_PIN_ENABLE2);
+
+  if (pin > 15) {
+    REG_SET_2BIT(pe2, pin - 16, EXTERNAL_PIN_DISABLED);
+  } else {
+    REG_SET_2BIT(pe1, pin, EXTERNAL_PIN_DISABLED);
+  }
+}
+
 int cmc_sram_retain(uint32_t mask) {
   volatile uint32_t* sramret = (volatile uint32_t*)(CMC_SRAM_RET);
 
@@ -83,9 +142,6 @@ int cmc_allow_dbg(uint8_t enable) {
 }
 
 int cmc_deep_power_down(void) {
-  if (pin_reg_amt >= 0) {
-    return -1;
-  }
   volatile uint32_t* ckctrl = (volatile uint32_t*)(CMC_CKCTRL); 
   volatile uint32_t* pmprot = (volatile uint32_t*)(CMC_PMPROT);
   volatile uint32_t* gpmctrl = (volatile uint32_t*)(CMC_GPMCTRL);
@@ -104,9 +160,6 @@ int cmc_deep_power_down(void) {
 }
 
 int cmc_power_down(void) {
-  if (pin_reg_amt >= 0) {
-    return -1;
-  }
   volatile uint32_t* ckctrl = (volatile uint32_t*)(CMC_CKCTRL); 
   volatile uint32_t* pmprot = (volatile uint32_t*)(CMC_PMPROT);
   volatile uint32_t* gpmctrl = (volatile uint32_t*)(CMC_GPMCTRL);
@@ -138,9 +191,6 @@ int cmc_sleep(void) {
 }
 
 int cmc_deep_sleep(void) {
-  if (pin_reg_amt >= 0) {
-    return -1;
-  }
   volatile uint32_t* ckctrl = (volatile uint32_t*)(CMC_CKCTRL); 
   volatile uint32_t* pmprot = (volatile uint32_t*)(CMC_PMPROT);
   volatile uint32_t* gpmctrl = (volatile uint32_t*)(CMC_GPMCTRL);
