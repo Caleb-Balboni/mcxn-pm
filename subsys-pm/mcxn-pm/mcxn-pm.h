@@ -20,6 +20,8 @@ typedef enum wuu_interrupt_irq_t {
   CMP1_INTERRUPT_IRQ      = 110, // Comparator one interrupt
 } wuu_interrupt_irq;
 
+#define WUU_DMAMUX_NUM 17
+
 #define WUU_EXTERNAL_PIN_AMT 30
 #define WUU_INTERNAL_MODULE_AMT 10
 
@@ -81,6 +83,8 @@ struct external_pin_cfg {
 #define CMC_PMPROT    (CMC_BASE + 0x18)         // Pwr Mode Prtct  (PMPROT)   page: 1442
 #define CMC_SRAM_RET  (CMC_BASE + 0xD0)         // SRAM Retention  (SRAMRET0) page: 1463
 #define CMC_DBG_CTRL  (CMC_BASE + 0x120)        // Debug Control   (DBGCTL)   page: 1468
+#define CMC_CKSTAT    (CMC_BASE + 0x14)         // Clock Status    (CKSTAT)   page: 1440
+
 // CKCTRL
 typedef enum cmc_clock_control_t {
   CMC_CLK_SLEEP                   = 0x01U,    // Clock cfg for sleep mode
@@ -89,16 +93,18 @@ typedef enum cmc_clock_control_t {
 
 // PMPROT
 typedef enum cmc_power_mode_protect_t {
-  CMC_PMP_DEEP_POWER_DOWN         = 0x08U,
-  CMC_PMP_POWER_DOWN              = 0x02U,
-  CMC_PMP_DEEP_SLEEP              = 0x01U,
+  CMC_PMP_ALLOW_ALL               = 0xFU,
+  CMC_PMP_DEEP_POWER_DOWN         = 0x8U,
+  CMC_PMP_POWER_DOWN              = 0x2U,
+  CMC_PMP_DEEP_SLEEP              = 0x1U,
 } cmc_power_mode_protect;
 
 // GPMCTRL
 typedef enum cmc_global_power_mode_t {
-  CMC_GPM_DEEP_POWER_DOWN         = 0x0FU,
-  CMC_GPM_POWER_DOWN              = 0x03U,
-  CMC_GPM_DEEP_SLEEP              = 0x01U,
+  CMC_GPM_DEEP_POWER_DOWN         = 0xFU,
+  CMC_GPM_POWER_DOWN              = 0x7U,
+  CMC_GPM_DEEP_SLEEP              = 0x3U,
+  CMC_GPM_SLEEP                   = 0x1U,
 } cmc_global_power_mode;
 
 // MCXN947 API Functions
@@ -135,6 +141,10 @@ int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg);
 // @param pin - the pin to disable (0 - WUU_EXTERNAL_PIN_AMT)
 // @return - returns 0 upon success or -1 if the pin could not be configured
 int wuu_disable_external_pin(uint8_t pin);
+
+// checks the last power state that the core went into
+// @return - CKMODE 0000b (never entered a lower power mode), 0001b went into sleep mode, 1111b went into a low power mode
+uint8_t cmc_get_last_power_state(void);
 
 // configures which partitions of the SRAM will be retained in the power-down state.
 // IMPORTANT NOTE: setting a bit to zero means the SRAM will be retained for that partition, if one it will not be retained

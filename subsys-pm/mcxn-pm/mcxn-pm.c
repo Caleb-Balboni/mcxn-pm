@@ -77,7 +77,7 @@ void wuu_external_pin_enable_interrupt(uint8_t enable) {
     irq_disable(WUU_INTERRUPT_IRQ);
     return;
   }
-  irq_enable(WUU_INTERRUPT_IRQ);
+  NVIC_EnableIRQ(WUU_INTERRUPT_IRQ);
   NVIC_ClearPendingIRQ(WUU_INTERRUPT_IRQ);
 }
 
@@ -85,7 +85,7 @@ void wuu_module_enable_interrupt(wuu_interrupt_irq interrupt, uint8_t enable) {
   if (!enable) {
     irq_disable(interrupt);
   }
-  irq_enable(interrupt);
+  NVIC_EnableIRQ(interrupt);
   NVIC_ClearPendingIRQ(interrupt);
 }
 
@@ -147,6 +147,13 @@ int cmc_allow_dbg(uint8_t enable) {
   return 0;
 }
 
+uint8_t cmc_get_last_power_state(void) {
+  volatile uint32_t* ckstat = (volatile uint32_t*)(CMC_CKSTAT);
+
+  uint8_t ckmode = *ckstat & 0xF;
+  return ckmode;
+}
+
 int cmc_deep_power_down(void) {
   volatile uint32_t* ckctrl = (volatile uint32_t*)(CMC_CKCTRL); 
   volatile uint32_t* pmprot = (volatile uint32_t*)(CMC_PMPROT);
@@ -172,7 +179,6 @@ int cmc_power_down(void) {
   REG_SET_4BIT(ckctrl, 0, CMC_CLK_DEEP); 
   REG_SET_4BIT(pmprot, 0, CMC_PMP_POWER_DOWN);
   REG_SET_4BIT(gpmctrl, 0, CMC_GPM_POWER_DOWN);
-  printk("CKCTRL=0x%08x PMPROT=0x%08x GPMCTRL=0x%08x\n", *ckctrl, *pmprot, *gpmctrl);
 
   // docs say last use register must be read back before WFI
   (void)*gpmctrl;
