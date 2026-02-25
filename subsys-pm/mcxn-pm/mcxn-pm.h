@@ -143,7 +143,12 @@ void wuu_module_attach_cb(wuu_interrupt_irq interrupt, wuu_cb_t cb, void* user_d
 // @return - returns 0 upon success or -1 if the pin could not be configured
 int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg); 
 
-// 
+// configure the module (enables or disables modules) 
+// NOTE: there are 18 modules in total. The first 9 are interrupt driven modules, the second 9 are DMA or trigger requests
+// only input module numbers 0-9 into this function, the particular module is decided based upon the inputted event type
+// @param module - the particular module to configure and enable (0 - 9)
+// @param event  - the particular kind of event the module is associated with (interrupt or DMA/Trigger)
+// @return - 0 upon success or -1 if the inputted module is invalid
 int wuu_cfg_module(uint8_t module, module_wakeup_event event);
 
 // disables the external pin as a wake up source, and removes the callback function
