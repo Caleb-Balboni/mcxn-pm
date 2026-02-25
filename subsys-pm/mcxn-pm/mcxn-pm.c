@@ -118,6 +118,20 @@ int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg) {
   return 0;
 }
 
+int wuu_cfg_module(uint8_t module, module_wakeup_event event) {
+  volatile uint32_t* me = (volatile uint32_t*)(WUU_MODULE_ME);
+  volatile uint32_t* de = (volatile uint32_t*)(WUU_MODULE_DE);
+  if (module > 9) {
+    return -1;
+  }
+  if (event == MODULE_WAKEUP_INTERRUPT) {
+    REG_SET_BIT(*me, module);
+  } else {
+    REG_SET_BIT(*de, module);
+  }
+  return 0;
+}
+
 int wuu_disable_external_pin(uint8_t pin) {
   volatile uint32_t* pe1 = (volatile uint32_t*)(WUU_PIN_ENABLE1);
   volatile uint32_t* pe2 = (volatile uint32_t*)(WUU_PIN_ENABLE2);

@@ -35,6 +35,8 @@ typedef enum wuu_interrupt_irq_t {
 #define WUU_PIN_PM        (WUU_BASE + 0x50)   // Pin Mode Cfg     (PMC)   page: 873
 #define WUU_PIN_DMATRIG1  (WUU_BASE + 0x38)   // Pin DMA/Trig Cfg (PDC1)  page: 864
 #define WUU_PIN_DMATRIG2  (WUU_BASE + 0x3C)   // Pin DMA/Trig Cfg (PDC2)  page: 868
+#define WUU_MODULE_ME     (WUU_BASE + 0x18)   // Module interrupt (ME)    page: 850
+#define WUU_MODULE_DE     (WUU_BASE + 0x1C)   // Module DMA/Trig  (DE)    page: 854
 
 // PDC
 typedef enum external_pin_wakeup_event_t {
@@ -57,6 +59,12 @@ typedef enum external_pin_pm_t {
   EXTERNAL_PIN_ALL_POWER_MODES      = 0x01U,  // External pin can fire at any time (any sleep state)
 } external_pin_pm;
 
+// DE/ME
+typedef enum module_wakeup_event_t {
+  MODULE_WAKEUP_INTERRUPT,
+  MODULE_WAKEUP_DMA_TRIGGER,
+} module_wakeup_event;
+
 // user set callback function - WUU interrupt handler
 typedef void (*wuu_cb_t)(void* user_data);
 
@@ -72,8 +80,6 @@ struct external_pin_cfg {
   enum external_pin_edge_detection_t edge;
   enum external_pin_pm_t pm;
 };
-
-// TODO --> add configurations for modules in the WUU
 
 // CORE MODE CONTROLLER (CMC) PARAMS
 
@@ -136,6 +142,9 @@ void wuu_module_attach_cb(wuu_interrupt_irq interrupt, wuu_cb_t cb, void* user_d
 // @param cfg - the configuration for the pin and a user defined callback function upon wake (can be NULL if unneeded)
 // @return - returns 0 upon success or -1 if the pin could not be configured
 int wuu_cfg_external_pin(uint8_t pin, struct external_pin_cfg* cfg); 
+
+// 
+int wuu_cfg_module(uint8_t module, module_wakeup_event event);
 
 // disables the external pin as a wake up source, and removes the callback function
 // @param pin - the pin to disable (0 - WUU_EXTERNAL_PIN_AMT)
